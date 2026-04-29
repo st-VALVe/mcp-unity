@@ -1,0 +1,43 @@
+{
+  "name": "mcp-unity",
+  "version": "1.3.0",
+  "description": "Unity Editor MCP server with scene, component, test, and UI interaction tools.",
+  "author": {
+    "name": "st-VALVe",
+    "url": "https://github.com/st-VALVe"
+  },
+  "homepage": "https://github.com/st-VALVe/mcp-unity",
+  "repository": "https://github.com/st-VALVe/mcp-unity",
+  "license": "MIT",
+  "keywords": [
+    "unity",
+    "mcp",
+    "unity-editor",
+    "game-development",
+    "ui-automation"
+  ],
+  "skills": "./.codex-plugin/skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "MCP Unity",
+    "shortDescription": "Control Unity Editor through MCP",
+    "longDescription": "Connect Codex to Unity Editor through MCP Unity to inspect scenes, update GameObjects and components, run tests and menu items, and interact with Unity UI such as buttons, ScrollRects, and input fields.",
+    "developerName": "st-VALVe",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/st-VALVe/mcp-unity",
+    "privacyPolicyURL": "https://github.com/st-VALVe/mcp-unity",
+    "termsOfServiceURL": "https://github.com/st-VALVe/mcp-unity",
+    "defaultPrompt": [
+      "Inspect the active Unity scene",
+      "Run Unity tests through MCP",
+      "Click through a Unity UI tutorial"
+    ],
+    "brandColor": "#111827",
+    "screenshots": []
+  }
+}

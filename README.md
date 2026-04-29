@@ -96,6 +96,18 @@ The following tools are available for manipulating and querying Unity scenes and
 - `get_gameobject`: Gets detailed information about a specific GameObject including all components
   > **Example prompt:** "Get the details of the Player GameObject"
 
+- `click_ui`: Clicks a Unity UI GameObject by hierarchy path or instance ID using EventSystem pointer events
+  > **Example prompt:** "Click the Continue button in the active popup"
+
+- `scroll_ui`: Scrolls a Unity UI ScrollRect by normalized position/delta and can dispatch a scroll event
+  > **Example prompt:** "Scroll the month picker down by 0.1"
+
+- `set_ui_input_text`: Sets text on Unity UI InputField, TMP_InputField, Text, or TMP_Text components
+  > **Example prompt:** "Set the date of birth input text to 04/11/1982"
+
+- `invoke_component_method`: Invokes a method on a component attached to a GameObject, with optional non-public access
+  > **Example prompt:** "Invoke OnDateSelectionComplete on DateSelectionReciever with 1982-11-04"
+
 - `get_console_logs`: Retrieves logs from the Unity console with pagination support
   > **Example prompt:** "Show me the last 20 error logs from the Unity console"
 
@@ -174,6 +186,12 @@ The following tools are available for manipulating and querying Unity scenes and
 - Unity 6 or later - to [install the server](#install-server)
 - Node.js 18 or later - to [start the server](#start-server)
 - npm 9 or later - to [debug the server](#debug-server)
+
+## Codex Plugin
+
+This repository can also be installed as a Codex plugin. The plugin manifest lives in `.codex-plugin/plugin.json` and registers the local MCP server through `.mcp.json`.
+
+The plugin launcher starts `Server~/build/index.js`. On first run, it installs `Server~` npm dependencies and builds the TypeScript server if needed, keeping all setup output on stderr so MCP stdio remains clean.
 
 > [!NOTE]
 > **Project Paths with Spaces**

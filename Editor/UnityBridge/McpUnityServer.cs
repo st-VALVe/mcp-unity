@@ -375,6 +375,19 @@ namespace McpUnity.Unity
             GetGameObjectTool getGameObjectTool = new GetGameObjectTool();
             _tools.Add(getGameObjectTool.Name, getGameObjectTool);
 
+            // Register UI Tools
+            ClickUiTool clickUiTool = new ClickUiTool();
+            _tools.Add(clickUiTool.Name, clickUiTool);
+
+            ScrollUiTool scrollUiTool = new ScrollUiTool();
+            _tools.Add(scrollUiTool.Name, scrollUiTool);
+
+            SetUiInputTextTool setUiInputTextTool = new SetUiInputTextTool();
+            _tools.Add(setUiInputTextTool.Name, setUiInputTextTool);
+
+            InvokeComponentMethodTool invokeComponentMethodTool = new InvokeComponentMethodTool();
+            _tools.Add(invokeComponentMethodTool.Name, invokeComponentMethodTool);
+
             // Register DuplicateGameObjectTool
             DuplicateGameObjectTool duplicateGameObjectTool = new DuplicateGameObjectTool();
             _tools.Add(duplicateGameObjectTool.Name, duplicateGameObjectTool);

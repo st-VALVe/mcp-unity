@@ -22,6 +22,7 @@ import { registerUnloadSceneTool } from './tools/unloadSceneTool.js';
 import { registerRecompileScriptsTool } from './tools/recompileScriptsTool.js';
 import { registerGetGameObjectTool } from './tools/getGameObjectTool.js';
 import { registerTransformTools } from './tools/transformTools.js';
+import { registerUiTools } from './tools/uiTools.js';
 import { registerCreateMaterialTool, registerAssignMaterialTool, registerModifyMaterialTool, registerGetMaterialInfoTool } from './tools/materialTools.js';
 import { registerDuplicateGameObjectTool, registerDeleteGameObjectTool, registerReparentGameObjectTool } from './tools/gameObjectTools.js';
 import { registerBatchExecuteTool } from './tools/batchExecuteTool.js';
@@ -44,7 +45,7 @@ const resourceLogger = new Logger('Resources', LogLevel.INFO);
 const server = new McpServer (
   {
     name: "MCP Unity Server",
-    version: "1.0.0"
+    version: "1.3.0"
   },
   {
     capabilities: {
@@ -77,6 +78,7 @@ registerGetSceneInfoTool(server, mcpUnity, toolLogger);
 registerUnloadSceneTool(server, mcpUnity, toolLogger);
 registerRecompileScriptsTool(server, mcpUnity, toolLogger);
 registerGetGameObjectTool(server, mcpUnity, toolLogger);
+registerUiTools(server, mcpUnity, toolLogger);
 registerTransformTools(server, mcpUnity, toolLogger);
 registerDuplicateGameObjectTool(server, mcpUnity, toolLogger);
 registerDeleteGameObjectTool(server, mcpUnity, toolLogger);
