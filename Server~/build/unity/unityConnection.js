@@ -1,0 +1,459 @@
+import WebSocket from 'ws';
+import { EventEmitter } from 'events';
+import { McpUnityError, ErrorType } from '../utils/errors.js';
+/**
+ * Connection states for the Unity WebSocket connection
+ */
+export var ConnectionState;
+(function (ConnectionState) {
+    ConnectionState["Disconnected"] = "disconnected";
+    ConnectionState["Connecting"] = "connecting";
+    ConnectionState["Connected"] = "connected";
+    ConnectionState["Reconnecting"] = "reconnecting";
+})(ConnectionState || (ConnectionState = {}));
+/**
+ * Custom WebSocket close codes for Unity-specific events
+ * Range 4000-4999 is reserved for application use
+ */
+export const UnityCloseCode = {
+    /** Unity is entering Play mode - use fast polling instead of backoff */
+    PLAY_MODE: 4001
+};
+/**
+ * Default configuration values
+ */
+const DEFAULT_CONFIG = {
+    connectTimeout: 5000,
+    minReconnectDelay: 1000,
+    maxReconnectDelay: 30000,
+    reconnectBackoffMultiplier: 2,
+    maxReconnectAttempts: 50, // Prevent unbounded file descriptor accumulation (see #110)
+    heartbeatInterval: 30000,
+    heartbeatTimeout: 5000,
+    playModePollingInterval: 3000 // Fixed 3 second polling during Play mode
+};
+/**
+ * UnityConnection manages the WebSocket connection to Unity Editor
+ * with automatic reconnection, exponential backoff, and heartbeat monitoring.
+ *
+ * Events:
+ * - 'stateChange': Emitted when connection state changes
+ * - 'message': Emitted when a message is received from Unity
+ * - 'error': Emitted when an error occurs
+ */
+export class UnityConnection extends EventEmitter {
+    logger;
+    config;
+    ws = null;
+    state = ConnectionState.Disconnected;
+    // Reconnection state
+    reconnectAttempt = 0;
+    reconnectTimer = null;
+    connectionTimeoutTimer = null;
+    isManualDisconnect = false;
+    isPlayModeReconnect = false; // True when reconnecting due to Unity Play mode
+    // Heartbeat state
+    heartbeatTimer = null;
+    heartbeatTimeoutTimer = null;
+    lastPongTime = 0;
+    awaitingPong = false;
+    constructor(logger, config) {
+        super();
+        this.logger = logger;
+        this.config = {
+            ...DEFAULT_CONFIG,
+            ...config
+        };
+    }
+    /**
+     * Get the current connection state
+     */
+    get connectionState() {
+        return this.state;
+    }
+    /**
+     * Check if currently connected
+     */
+    get isConnected() {
+        return this.state === ConnectionState.Connected &&
+            this.ws !== null &&
+            this.ws.readyState === WebSocket.OPEN;
+    }
+    /**
+     * Check if currently connecting or reconnecting
+     */
+    get isConnecting() {
+        return this.state === ConnectionState.Connecting ||
+            this.state === ConnectionState.Reconnecting;
+    }
+    /**
+     * Get time since last successful heartbeat response (pong)
+     */
+    get timeSinceLastPong() {
+        if (this.lastPongTime === 0)
+            return -1;
+        return Date.now() - this.lastPongTime;
+    }
+    /**
+     * Update configuration dynamically
+     */
+    updateConfig(config) {
+        this.config = { ...this.config, ...config };
+    }
+    /**
+     * Connect to Unity WebSocket server
+     */
+    async connect() {
+        if (this.isConnected) {
+            this.logger.debug('Already connected to Unity');
+            return;
+        }
+        if (this.isConnecting) {
+            this.logger.debug('Connection already in progress');
+            return;
+        }
+        this.isManualDisconnect = false;
+        return this.doConnect();
+    }
+    /**
+     * Disconnect from Unity WebSocket server
+     */
+    disconnect(reason) {
+        this.isManualDisconnect = true;
+        this.stopReconnectTimer();
+        this.stopHeartbeat();
+        this.closeWebSocket(reason || 'Manual disconnect');
+        this.setState(ConnectionState.Disconnected, reason || 'Manual disconnect');
+    }
+    /**
+     * Send a message to Unity
+     */
+    send(message) {
+        if (!this.isConnected || !this.ws) {
+            throw new McpUnityError(ErrorType.CONNECTION, 'Not connected to Unity');
+        }
+        try {
+            this.ws.send(message);
+        }
+        catch (err) {
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            throw new McpUnityError(ErrorType.CONNECTION, `Send failed: ${errorMessage}`);
+        }
+    }
+    /**
+     * Get WebSocket instance (for advanced use)
+     */
+    get webSocket() {
+        return this.ws;
+    }
+    /**
+     * Internal: Perform the actual connection
+     */
+    async doConnect() {
+        const isReconnecting = this.reconnectAttempt > 0;
+        this.setState(isReconnecting ? ConnectionState.Reconnecting : ConnectionState.Connecting, isReconnecting ? `Reconnection attempt ${this.reconnectAttempt}` : 'Connecting');
+        return new Promise((resolve, reject) => {
+            const wsUrl = `ws://${this.config.host}:${this.config.port}/McpUnity`;
+            this.logger.debug(`Connecting to ${wsUrl}...`);
+            // Create connection options with headers for client identification
+            const options = {
+                headers: {
+                    'X-Client-Name': this.config.clientName || ''
+                },
+                origin: this.config.clientName || ''
+            };
+            // Clean up existing socket first
+            this.closeWebSocket('Preparing new connection');
+            // Create new WebSocket
+            this.ws = new WebSocket(wsUrl, options);
+            // Connection timeout
+            this.clearConnectionTimeout();
+            this.connectionTimeoutTimer = setTimeout(() => {
+                if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+                    this.logger.warn('Connection timeout');
+                    this.closeWebSocket('Connection timeout');
+                    const error = new McpUnityError(ErrorType.CONNECTION, 'Connection timeout');
+                    this.handleConnectionFailure(error);
+                    reject(error);
+                }
+            }, this.config.connectTimeout);
+            this.ws.onopen = () => {
+                this.clearConnectionTimeout();
+                this.logger.info('WebSocket connected to Unity');
+                // Reset reconnection state on successful connection
+                this.reconnectAttempt = 0;
+                this.isPlayModeReconnect = false; // Clear Play mode flag
+                this.lastPongTime = Date.now();
+                this.setState(ConnectionState.Connected, 'Connection established');
+                this.startHeartbeat();
+                resolve();
+            };
+            this.ws.onerror = (err) => {
+                this.clearConnectionTimeout();
+                const errorMessage = err.message || 'Unknown error';
+                this.logger.error(`WebSocket error: ${errorMessage}`);
+                const error = new McpUnityError(ErrorType.CONNECTION, `Connection failed: ${errorMessage}`);
+                this.emit('error', error);
+                // Don't reject here - let onclose handle cleanup and reconnection
+            };
+            this.ws.onmessage = (event) => {
+                this.emit('message', event.data.toString());
+            };
+            this.ws.onclose = (event) => {
+                this.clearConnectionTimeout();
+                this.stopHeartbeat();
+                const reason = event.reason || `Code: ${event.code}`;
+                this.logger.debug(`WebSocket closed: ${reason}`);
+                // Check if Unity is entering Play mode (custom close code 4001)
+                if (event.code === UnityCloseCode.PLAY_MODE) {
+                    this.logger.info('Unity entering Play mode - using fast polling for reconnection');
+                    this.isPlayModeReconnect = true;
+                }
+                // Clear WebSocket reference
+                this.ws = null;
+                // Handle reconnection if not manual disconnect
+                if (!this.isManualDisconnect) {
+                    this.handleConnectionFailure(new McpUnityError(ErrorType.CONNECTION, reason));
+                }
+                else {
+                    this.setState(ConnectionState.Disconnected, reason);
+                }
+                // Reject if we were in initial connection
+                if (this.state === ConnectionState.Connecting) {
+                    reject(new McpUnityError(ErrorType.CONNECTION, reason));
+                }
+            };
+            // Handle WebSocket ping/pong for heartbeat
+            this.ws.on('pong', () => {
+                this.handlePong();
+            });
+        });
+    }
+    /**
+     * Handle connection failure and schedule reconnection
+     */
+    handleConnectionFailure(error) {
+        if (this.isManualDisconnect) {
+            this.setState(ConnectionState.Disconnected, 'Manual disconnect');
+            return;
+        }
+        // Single-flight guard: during a Unity domain reload, `onclose` and the heartbeat
+        // timeout can both trip within a few milliseconds of each other. Without this
+        // guard each trip schedules its own setTimeout, so multiple `doConnect()` calls
+        // fire in parallel, each opening a fresh socket and accumulating file descriptors
+        // on the Unity side (issue #110 territory). If a reconnect is already pending,
+        // ignore the duplicate trigger.
+        if (this.reconnectTimer !== null) {
+            this.logger.debug('Reconnect already scheduled, ignoring duplicate failure');
+            return;
+        }
+        // Check max reconnect attempts (skip for Play mode - unlimited retries)
+        if (!this.isPlayModeReconnect &&
+            this.config.maxReconnectAttempts !== -1 &&
+            this.reconnectAttempt >= this.config.maxReconnectAttempts) {
+            this.logger.error(`Max reconnection attempts (${this.config.maxReconnectAttempts}) reached`);
+            this.setState(ConnectionState.Disconnected, 'Max reconnection attempts reached');
+            this.emit('error', new McpUnityError(ErrorType.CONNECTION, 'Max reconnection attempts reached'));
+            return;
+        }
+        // Use fixed polling interval for Play mode, exponential backoff otherwise
+        const delay = this.isPlayModeReconnect
+            ? this.config.playModePollingInterval
+            : this.calculateBackoffDelay();
+        this.reconnectAttempt++;
+        const modeInfo = this.isPlayModeReconnect ? ' (Play mode polling)' : '';
+        this.logger.info(`Scheduling reconnection attempt ${this.reconnectAttempt} in ${delay}ms${modeInfo}`);
+        this.setState(ConnectionState.Reconnecting, `Waiting ${delay}ms before attempt ${this.reconnectAttempt}${modeInfo}`);
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
+            this.doConnect().catch((err) => {
+                this.logger.warn(`Reconnection attempt ${this.reconnectAttempt} failed: ${err.message}`);
+            });
+        }, delay);
+    }
+    /**
+     * Calculate exponential backoff delay
+     */
+    calculateBackoffDelay() {
+        const baseDelay = this.config.minReconnectDelay;
+        const multiplier = this.config.reconnectBackoffMultiplier;
+        const maxDelay = this.config.maxReconnectDelay;
+        // Exponential backoff: base * multiplier^attempt
+        const delay = baseDelay * Math.pow(multiplier, this.reconnectAttempt);
+        // Add jitter (0-20% random variation) to prevent thundering herd
+        const jitter = delay * 0.2 * Math.random();
+        return Math.min(delay + jitter, maxDelay);
+    }
+    /**
+     * Stop reconnection timer
+     */
+    stopReconnectTimer() {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.reconnectAttempt = 0;
+    }
+    /**
+     * Start heartbeat monitoring
+     */
+    startHeartbeat() {
+        this.stopHeartbeat();
+        if (this.config.heartbeatInterval <= 0) {
+            this.logger.debug('Heartbeat disabled');
+            return;
+        }
+        this.logger.debug(`Starting heartbeat with ${this.config.heartbeatInterval}ms interval`);
+        this.heartbeatTimer = setInterval(() => {
+            this.sendHeartbeat();
+        }, this.config.heartbeatInterval);
+    }
+    /**
+     * Stop heartbeat monitoring
+     */
+    stopHeartbeat() {
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+        if (this.heartbeatTimeoutTimer) {
+            clearTimeout(this.heartbeatTimeoutTimer);
+            this.heartbeatTimeoutTimer = null;
+        }
+        this.awaitingPong = false;
+    }
+    /**
+     * Send heartbeat ping
+     */
+    sendHeartbeat() {
+        if (!this.isConnected || !this.ws) {
+            return;
+        }
+        // If we're still waiting for a pong from the last ping, connection may be stale
+        if (this.awaitingPong) {
+            this.logger.warn('No pong received for previous ping, connection may be stale');
+            this.handleStaleConnection();
+            return;
+        }
+        try {
+            this.awaitingPong = true;
+            this.ws.ping();
+            this.logger.debug('Heartbeat ping sent');
+            // Set timeout for pong response
+            this.heartbeatTimeoutTimer = setTimeout(() => {
+                if (this.awaitingPong) {
+                    this.logger.warn('Heartbeat timeout - no pong received');
+                    this.handleStaleConnection();
+                }
+            }, this.config.heartbeatTimeout);
+        }
+        catch (err) {
+            this.logger.error(`Failed to send heartbeat: ${err instanceof Error ? err.message : String(err)}`);
+            this.awaitingPong = false;
+        }
+    }
+    /**
+     * Handle pong response
+     */
+    handlePong() {
+        this.awaitingPong = false;
+        this.lastPongTime = Date.now();
+        if (this.heartbeatTimeoutTimer) {
+            clearTimeout(this.heartbeatTimeoutTimer);
+            this.heartbeatTimeoutTimer = null;
+        }
+        this.logger.debug('Heartbeat pong received');
+    }
+    /**
+     * Handle stale connection detected by heartbeat
+     */
+    handleStaleConnection() {
+        this.logger.warn('Stale connection detected, forcing reconnection');
+        this.awaitingPong = false;
+        // Force close and trigger reconnection
+        this.closeWebSocket('Stale connection detected');
+        this.handleConnectionFailure(new McpUnityError(ErrorType.CONNECTION, 'Stale connection detected'));
+    }
+    /**
+     * Close WebSocket immediately
+     *
+     * Always uses terminate() instead of close() to prevent file descriptor
+     * accumulation. A graceful close (ws.close()) leaves the socket alive
+     * during the TCP close handshake, which can overlap with the next
+     * connection attempt and accumulate file descriptors on the Unity side.
+     * websocket-sharp uses Mono's IOSelector/select(), which crashes when
+     * file descriptor values exceed ~1024 (POSIX FD_SETSIZE limit).
+     * See: https://github.com/CoderGamester/mcp-unity/issues/110
+     */
+    closeWebSocket(reason) {
+        if (!this.ws)
+            return;
+        this.logger.debug(`Closing WebSocket: ${reason || 'No reason'}`);
+        this.clearConnectionTimeout();
+        // Capture reference and null the field first to prevent any
+        // event handler from seeing a stale socket during teardown
+        const socket = this.ws;
+        this.ws = null;
+        // Remove all event handlers before terminating
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        socket.removeAllListeners('pong');
+        try {
+            // Always terminate immediately — no graceful close handshake.
+            // This ensures the underlying socket FD is released right away.
+            socket.terminate();
+        }
+        catch (err) {
+            this.logger.error(`Error closing WebSocket: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }
+    clearConnectionTimeout() {
+        if (this.connectionTimeoutTimer) {
+            clearTimeout(this.connectionTimeoutTimer);
+            this.connectionTimeoutTimer = null;
+        }
+    }
+    /**
+     * Set connection state and emit event
+     */
+    setState(newState, reason) {
+        if (this.state === newState)
+            return;
+        const previousState = this.state;
+        this.state = newState;
+        const change = {
+            previousState,
+            currentState: newState,
+            reason,
+            attemptNumber: this.reconnectAttempt > 0 ? this.reconnectAttempt : undefined
+        };
+        this.logger.debug(`Connection state: ${previousState} -> ${newState} (${reason || 'no reason'})`);
+        this.emit('stateChange', change);
+    }
+    /**
+     * Force a reconnection (useful after Unity domain reload)
+     */
+    forceReconnect() {
+        this.logger.info('Forcing reconnection...');
+        this.isManualDisconnect = false;
+        this.stopReconnectTimer();
+        this.closeWebSocket('Force reconnect');
+        this.reconnectAttempt = 0; // Reset attempts for fresh reconnect
+        this.doConnect().catch((err) => {
+            this.logger.warn(`Force reconnect failed: ${err.message}`);
+        });
+    }
+    /**
+     * Get connection statistics
+     */
+    getStats() {
+        return {
+            state: this.state,
+            reconnectAttempt: this.reconnectAttempt,
+            timeSinceLastPong: this.timeSinceLastPong,
+            isAwaitingPong: this.awaitingPong
+        };
+    }
+}

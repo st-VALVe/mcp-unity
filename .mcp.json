@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mcp-unity": {
+      "command": "node",
+      "args": [
+        "./.codex-plugin/scripts/start-mcp-unity-server.mjs"
+      ],
+      "env": {
+        "LOGGING": "false"
+      }
+    }
+  }
+}

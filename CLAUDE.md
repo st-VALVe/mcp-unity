@@ -95,7 +95,7 @@ Same pattern as tools:
 
 **McpUnitySettings.json** fields:
 - `Port` (default 8090): Unity WebSocket server port
-- `RequestTimeoutSeconds` (default 10): Node request timeout
+- `RequestTimeoutSeconds` (default 30): Node request timeout
 - `AllowRemoteConnections` (default false): Bind to 0.0.0.0 when true
 
 **Environment variables** (Node side):

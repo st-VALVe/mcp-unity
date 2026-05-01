@@ -324,7 +324,7 @@ namespace McpUnity.Unity
             _tools.Add(addPackageTool.Name, addPackageTool);
             
             // Register RunTestsTool
-            RunTestsTool runTestsTool = new RunTestsTool(_testRunnerService);
+            RunTestsTool runTestsTool = new RunTestsTool(_testRunnerService, _consoleLogsService);
             _tools.Add(runTestsTool.Name, runTestsTool);
             
             // Register SendConsoleLogTool
@@ -375,6 +375,19 @@ namespace McpUnity.Unity
             GetGameObjectTool getGameObjectTool = new GetGameObjectTool();
             _tools.Add(getGameObjectTool.Name, getGameObjectTool);
 
+            // Register UI Tools
+            ClickUiTool clickUiTool = new ClickUiTool();
+            _tools.Add(clickUiTool.Name, clickUiTool);
+
+            ScrollUiTool scrollUiTool = new ScrollUiTool();
+            _tools.Add(scrollUiTool.Name, scrollUiTool);
+
+            SetUiInputTextTool setUiInputTextTool = new SetUiInputTextTool();
+            _tools.Add(setUiInputTextTool.Name, setUiInputTextTool);
+
+            InvokeComponentMethodTool invokeComponentMethodTool = new InvokeComponentMethodTool();
+            _tools.Add(invokeComponentMethodTool.Name, invokeComponentMethodTool);
+
             // Register DuplicateGameObjectTool
             DuplicateGameObjectTool duplicateGameObjectTool = new DuplicateGameObjectTool();
             _tools.Add(duplicateGameObjectTool.Name, duplicateGameObjectTool);
@@ -412,6 +425,40 @@ namespace McpUnity.Unity
 
             GetMaterialInfoTool getMaterialInfoTool = new GetMaterialInfoTool();
             _tools.Add(getMaterialInfoTool.Name, getMaterialInfoTool);
+
+            // Register UI Interaction Tools
+            CaptureGameViewTool captureGameViewTool = new CaptureGameViewTool();
+            _tools.Add(captureGameViewTool.Name, captureGameViewTool);
+
+            ScreenshotTool screenshotTool = new ScreenshotTool();
+            _tools.Add(screenshotTool.Name, screenshotTool);
+
+            CaptureDiagnosticsTool captureDiagnosticsTool = new CaptureDiagnosticsTool(_consoleLogsService);
+            _tools.Add(captureDiagnosticsTool.Name, captureDiagnosticsTool);
+
+            InvokeUIEventTool invokeUIEventTool = new InvokeUIEventTool();
+            _tools.Add(invokeUIEventTool.Name, invokeUIEventTool);
+
+            SetInputFieldTool setInputFieldTool = new SetInputFieldTool();
+            _tools.Add(setInputFieldTool.Name, setInputFieldTool);
+
+            EnterPlayModeTool enterPlayModeTool = new EnterPlayModeTool();
+            _tools.Add(enterPlayModeTool.Name, enterPlayModeTool);
+
+            ExitPlayModeTool exitPlayModeTool = new ExitPlayModeTool();
+            _tools.Add(exitPlayModeTool.Name, exitPlayModeTool);
+
+            FindGameObjectsTool findGameObjectsTool = new FindGameObjectsTool();
+            _tools.Add(findGameObjectsTool.Name, findGameObjectsTool);
+
+            UIClickGameObjectTool uiClickGameObjectTool = new UIClickGameObjectTool();
+            _tools.Add(uiClickGameObjectTool.Name, uiClickGameObjectTool);
+
+            WaitForUITool waitForUITool = new WaitForUITool();
+            _tools.Add(waitForUITool.Name, waitForUITool);
+
+            GetInteractableAtPositionTool getInteractableAtPositionTool = new GetInteractableAtPositionTool();
+            _tools.Add(getInteractableAtPositionTool.Name, getInteractableAtPositionTool);
 
             // Register BatchExecuteTool (must be registered last as it needs access to other tools)
             BatchExecuteTool batchExecuteTool = new BatchExecuteTool(this);

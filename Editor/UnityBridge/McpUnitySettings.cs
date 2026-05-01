@@ -16,17 +16,18 @@ namespace McpUnity.Unity
         public const string ServerVersion = "1.2.0";
         public const string PackageName = "com.gamelovers.mcp-unity";
         public const int RequestTimeoutMinimum = 10;
-        
+        public const int RequestTimeoutDefault = 30;
+
         // Paths
         private const string SettingsPath = "ProjectSettings/McpUnitySettings.json";
-        
+
         private static McpUnitySettings _instance;
 
         [Tooltip("Port number for MCP server")]
         public int Port = 8090;
-        
+
         [Tooltip("Timeout in seconds for tool request")]
-        public int RequestTimeoutSeconds = RequestTimeoutMinimum;
+        public int RequestTimeoutSeconds = RequestTimeoutDefault;
         
         [Tooltip("Whether to automatically start the MCP server when Unity opens")]
         public bool AutoStartServer = true;

@@ -50,7 +50,7 @@ The Unity settings file is the shared contract:
 - **Path**: `ProjectSettings/McpUnitySettings.json`
 - **Fields**
   - **Port** (default **8090**): Unity WebSocket server port.
-  - **RequestTimeoutSeconds** (default **10**): Node request timeout (Node reads this if the settings file is discoverable).
+  - **RequestTimeoutSeconds** (default **30**): Node request timeout (Node reads this if the settings file is discoverable).
   - **AllowRemoteConnections** (default **false**): Unity binds to `0.0.0.0` when enabled; otherwise `localhost`.
   - **EnableInfoLogs**: Unity console logging verbosity.
   - **NpmExecutablePath**: optional npm path for Unity-driven install/build.
@@ -58,7 +58,7 @@ The Unity settings file is the shared contract:
 Node reads config from `../ProjectSettings/McpUnitySettings.json` relative to **its current working directory**. If not found, Node falls back to:
 - **host**: `localhost`
 - **port**: `8090`
-- **timeout**: `10s`
+- **timeout**: `30s`
 
 **Remote connection note**:
 - If Unity is on another machine, set `AllowRemoteConnections=true` in Unity and set `UNITY_HOST=<unity_machine_ip_or_hostname>` for the Node process.
@@ -127,6 +127,8 @@ Node reads config from `../ProjectSettings/McpUnitySettings.json` relative to **
 - `update_component` — Update or add components on GameObjects
 - `add_package` — Install packages via Package Manager
 - `run_tests` — Run Unity Test Runner tests
+- `capture_game_view` — Capture a PNG screenshot of the Unity Game view
+- `capture_diagnostics` — Save screenshot, console log, scene hierarchy, and metadata artifacts
 - `send_console_log` — Send logs to Unity console
 - `add_asset_to_scene` — Add assets to scene
 - `create_prefab` — Create prefabs with optional scripts

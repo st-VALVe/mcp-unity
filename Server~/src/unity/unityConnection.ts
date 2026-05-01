@@ -313,6 +313,17 @@ export class UnityConnection extends EventEmitter {
       return;
     }
 
+    // Single-flight guard: during a Unity domain reload, `onclose` and the heartbeat
+    // timeout can both trip within a few milliseconds of each other. Without this
+    // guard each trip schedules its own setTimeout, so multiple `doConnect()` calls
+    // fire in parallel, each opening a fresh socket and accumulating file descriptors
+    // on the Unity side (issue #110 territory). If a reconnect is already pending,
+    // ignore the duplicate trigger.
+    if (this.reconnectTimer !== null) {
+      this.logger.debug('Reconnect already scheduled, ignoring duplicate failure');
+      return;
+    }
+
     // Check max reconnect attempts (skip for Play mode - unlimited retries)
     if (!this.isPlayModeReconnect &&
         this.config.maxReconnectAttempts !== -1 &&

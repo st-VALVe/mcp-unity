@@ -65,7 +65,7 @@ export class McpUnity {
   private logger: Logger;
   private port: number = 8090;
   private host: string = 'localhost';
-  private requestTimeout = 10000;
+  private requestTimeout = 30000;
 
   private connection: UnityConnection | null = null;
   private pendingRequests: Map<string, PendingRequest> = new Map<string, PendingRequest>();
@@ -182,9 +182,11 @@ export class McpUnity {
     const configHost = process.env.UNITY_HOST || config.Host;
     this.host = configHost || 'localhost';
 
-    // Initialize timeout from environment variable (in seconds; it is the same as Cline) or use default (10 seconds)
+    // Initialize timeout from config file (seconds), fallback to 30 seconds when absent.
+    // Matches the Unity side default (RequestTimeoutDefault) so the Node bridge does not
+    // wait less than the Unity server is willing to wait for a tool response.
     const configTimeout = config.RequestTimeoutSeconds;
-    this.requestTimeout = configTimeout ? parseInt(configTimeout, 10) * 1000 : 10000;
+    this.requestTimeout = configTimeout ? parseInt(configTimeout, 10) * 1000 : 30000;
     this.logger.info(`Using request timeout: ${this.requestTimeout / 1000} seconds`);
   }
 

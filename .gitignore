@@ -116,7 +116,8 @@ Server~/log.txt
 Server~/log.txt.meta
 log.txt
 log.txt.meta
-Server~/build/*
+# Server~/build/* intentionally tracked in this embedded fork so the package
+# works out of the box without requiring devs to run npm install/build.
 Server~/node_modules/*
 .bmad-core/
 .windsurf/

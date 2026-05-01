@@ -22,9 +22,21 @@ import { registerUnloadSceneTool } from './tools/unloadSceneTool.js';
 import { registerRecompileScriptsTool } from './tools/recompileScriptsTool.js';
 import { registerGetGameObjectTool } from './tools/getGameObjectTool.js';
 import { registerTransformTools } from './tools/transformTools.js';
+import { registerUiTools } from './tools/uiTools.js';
 import { registerCreateMaterialTool, registerAssignMaterialTool, registerModifyMaterialTool, registerGetMaterialInfoTool } from './tools/materialTools.js';
 import { registerDuplicateGameObjectTool, registerDeleteGameObjectTool, registerReparentGameObjectTool } from './tools/gameObjectTools.js';
 import { registerBatchExecuteTool } from './tools/batchExecuteTool.js';
+import { registerCaptureGameViewTool } from './tools/captureGameViewTool.js';
+import { registerCaptureDiagnosticsTool } from './tools/captureDiagnosticsTool.js';
+import { registerScreenshotTool } from './tools/screenshotTool.js';
+import { registerInvokeUIEventTool } from './tools/invokeUIEventTool.js';
+import { registerSetInputFieldTool } from './tools/setInputFieldTool.js';
+import { registerEnterPlayModeTool } from './tools/enterPlayModeTool.js';
+import { registerExitPlayModeTool } from './tools/exitPlayModeTool.js';
+import { registerFindGameObjectsTool } from './tools/findGameObjectsTool.js';
+import { registerUIClickGameObjectTool } from './tools/uiClickGameObjectTool.js';
+import { registerWaitForUITool } from './tools/waitForUITool.js';
+import { registerGetInteractableAtPositionTool } from './tools/getInteractableAtPositionTool.js';
 import { registerGetMenuItemsResource } from './resources/getMenuItemResource.js';
 import { registerGetConsoleLogsResource } from './resources/getConsoleLogsResource.js';
 import { registerGetHierarchyResource } from './resources/getScenesHierarchyResource.js';
@@ -44,7 +56,7 @@ const resourceLogger = new Logger('Resources', LogLevel.INFO);
 const server = new McpServer (
   {
     name: "MCP Unity Server",
-    version: "1.0.0"
+    version: "1.3.1"
   },
   {
     capabilities: {
@@ -77,6 +89,7 @@ registerGetSceneInfoTool(server, mcpUnity, toolLogger);
 registerUnloadSceneTool(server, mcpUnity, toolLogger);
 registerRecompileScriptsTool(server, mcpUnity, toolLogger);
 registerGetGameObjectTool(server, mcpUnity, toolLogger);
+registerUiTools(server, mcpUnity, toolLogger);
 registerTransformTools(server, mcpUnity, toolLogger);
 registerDuplicateGameObjectTool(server, mcpUnity, toolLogger);
 registerDeleteGameObjectTool(server, mcpUnity, toolLogger);
@@ -87,6 +100,19 @@ registerCreateMaterialTool(server, mcpUnity, toolLogger);
 registerAssignMaterialTool(server, mcpUnity, toolLogger);
 registerModifyMaterialTool(server, mcpUnity, toolLogger);
 registerGetMaterialInfoTool(server, mcpUnity, toolLogger);
+
+// Register UI Interaction Tools (for FTUE self-verification, etc.)
+registerCaptureGameViewTool(server, mcpUnity, toolLogger);
+registerScreenshotTool(server, mcpUnity, toolLogger);
+registerCaptureDiagnosticsTool(server, mcpUnity, toolLogger);
+registerInvokeUIEventTool(server, mcpUnity, toolLogger);
+registerSetInputFieldTool(server, mcpUnity, toolLogger);
+registerEnterPlayModeTool(server, mcpUnity, toolLogger);
+registerExitPlayModeTool(server, mcpUnity, toolLogger);
+registerFindGameObjectsTool(server, mcpUnity, toolLogger);
+registerUIClickGameObjectTool(server, mcpUnity, toolLogger);
+registerWaitForUITool(server, mcpUnity, toolLogger);
+registerGetInteractableAtPositionTool(server, mcpUnity, toolLogger);
 
 // Register Batch Execute Tool (high-priority for performance)
 registerBatchExecuteTool(server, mcpUnity, toolLogger);
