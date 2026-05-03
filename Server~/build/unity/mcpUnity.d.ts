@@ -21,6 +21,8 @@ export interface SendRequestOptions {
     queueIfDisconnected?: boolean;
     /** Custom timeout for this request in milliseconds */
     timeout?: number;
+    /** If true, do not run opt-in modal diagnostics when this request times out */
+    skipModalDiagnosticsOnTimeout?: boolean;
 }
 /**
  * Configuration for McpUnity

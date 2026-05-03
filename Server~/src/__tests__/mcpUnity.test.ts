@@ -141,6 +141,55 @@ describe('Request timeout handling', () => {
 
     await unity.stop();
   });
+
+  it('can skip opt-in modal diagnostics for a timed out request', async () => {
+    const logger = new Logger('Test', LogLevel.ERROR);
+    const modalHelper = { detect: jest.fn(async () => ({ found: false })) };
+    const unity = new McpUnity(logger, {
+      queueingEnabled: false,
+      modalHelper: modalHelper as any
+    });
+    const connection = {
+      isConnected: true,
+      isConnecting: false,
+      connectionState: ConnectionState.Connected,
+      send: jest.fn(),
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+      removeAllListeners: jest.fn(),
+      forceReconnect: jest.fn(),
+      getStats: jest.fn(() => ({
+        state: ConnectionState.Connected,
+        reconnectAttempt: 0,
+        timeSinceLastPong: 0
+      }))
+    };
+
+    (unity as any).connection = connection;
+    (unity as any).detectModalsOnTimeout = true;
+
+    const request = {
+      id: 'skip-modal-diagnostics',
+      method: 'get_scene_info',
+      params: {}
+    };
+
+    const promise = unity.sendRequest(request, {
+      timeout: 50,
+      skipModalDiagnosticsOnTimeout: true
+    });
+    const timeoutResult = expect(promise).rejects.toMatchObject({
+      type: ErrorType.TIMEOUT,
+      message: 'Request timed out'
+    });
+
+    await jest.advanceTimersByTimeAsync(50);
+    await timeoutResult;
+
+    expect(modalHelper.detect).not.toHaveBeenCalled();
+
+    await unity.stop();
+  });
 });
 
 describe('Transform schema compatibility', () => {

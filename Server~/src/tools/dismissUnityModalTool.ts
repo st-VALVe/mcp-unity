@@ -87,7 +87,7 @@ async function probeUnityResponsiveness(mcpUnity: McpUnity): Promise<UnityRespon
   try {
     await mcpUnity.sendRequest(
       { method: 'get_scene_info', params: {} },
-      { queueIfDisconnected: false, timeout: 1500 }
+      { queueIfDisconnected: false, timeout: 1500, skipModalDiagnosticsOnTimeout: true }
     );
     return { wsConnected: true, mainThreadResponsive: true, probeMs: Date.now() - start };
   } catch {

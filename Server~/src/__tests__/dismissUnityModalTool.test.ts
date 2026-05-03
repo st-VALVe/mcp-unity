@@ -102,7 +102,7 @@ describe('dismiss_unity_modal tool', () => {
 
       expect(mockSendRequest).toHaveBeenCalledWith(
         { method: 'get_scene_info', params: {} },
-        { queueIfDisconnected: false, timeout: 1500 }
+        { queueIfDisconnected: false, timeout: 1500, skipModalDiagnosticsOnTimeout: true }
       );
       const json = JSON.parse(res.content[1].text);
       expect(json.unityResponsiveAfter.wsConnected).toBe(true);
