@@ -1,6 +1,7 @@
 import { Logger } from '../utils/logger.js';
 import { ConnectionState, ConnectionStateChange } from './unityConnection.js';
 import { CommandQueueConfig, CommandQueueStats } from './commandQueue.js';
+import { UnityModalHelper } from '../utils/unityModalHelper.js';
 interface UnityRequest {
     id?: string;
     method: string;
@@ -29,6 +30,12 @@ export interface McpUnityConfig {
     queue?: CommandQueueConfig;
     /** Whether command queuing is enabled by default (default: true) */
     queueingEnabled?: boolean;
+    /**
+     * Optional out-of-process modal helper. When provided AND timeout-path detection is enabled
+     * (env MCP_UNITY_DETECT_MODALS_ON_TIMEOUT=true), request timeouts will attach
+     * `details.modalDiagnostics` to the error in a fast, failure-tolerant way.
+     */
+    modalHelper?: UnityModalHelper;
 }
 export declare class McpUnity {
     private logger;
@@ -42,6 +49,8 @@ export declare class McpUnity {
     private commandQueue;
     private queueingEnabled;
     private isReplayingQueue;
+    private modalHelper;
+    private detectModalsOnTimeout;
     constructor(logger: Logger, config?: McpUnityConfig);
     /**
      * Enable or disable command queuing

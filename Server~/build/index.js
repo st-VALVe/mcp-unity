@@ -37,6 +37,9 @@ import { registerFindGameObjectsTool } from './tools/findGameObjectsTool.js';
 import { registerUIClickGameObjectTool } from './tools/uiClickGameObjectTool.js';
 import { registerWaitForUITool } from './tools/waitForUITool.js';
 import { registerGetInteractableAtPositionTool } from './tools/getInteractableAtPositionTool.js';
+import { registerDetectUnityModalTool } from './tools/detectUnityModalTool.js';
+import { registerDismissUnityModalTool } from './tools/dismissUnityModalTool.js';
+import { UnityModalHelper } from './utils/unityModalHelper.js';
 import { registerGetMenuItemsResource } from './resources/getMenuItemResource.js';
 import { registerGetConsoleLogsResource } from './resources/getConsoleLogsResource.js';
 import { registerGetHierarchyResource } from './resources/getScenesHierarchyResource.js';
@@ -61,8 +64,11 @@ const server = new McpServer({
         prompts: {},
     },
 });
+// Initialize the out-of-process modal helper. Shared between detect/dismiss tools
+// and the timeout-path diagnostics in McpUnity.
+const modalHelper = new UnityModalHelper(unityLogger);
 // Initialize MCP HTTP bridge with Unity editor
-const mcpUnity = new McpUnity(unityLogger);
+const mcpUnity = new McpUnity(unityLogger, { modalHelper });
 // Register all tools into the MCP server
 registerMenuItemTool(server, mcpUnity, toolLogger);
 registerSelectGameObjectTool(server, mcpUnity, toolLogger);
@@ -104,6 +110,9 @@ registerFindGameObjectsTool(server, mcpUnity, toolLogger);
 registerUIClickGameObjectTool(server, mcpUnity, toolLogger);
 registerWaitForUITool(server, mcpUnity, toolLogger);
 registerGetInteractableAtPositionTool(server, mcpUnity, toolLogger);
+// Register Modal Dialog Tools (Windows-only, out-of-process via PowerShell)
+registerDetectUnityModalTool(server, mcpUnity, modalHelper, toolLogger);
+registerDismissUnityModalTool(server, mcpUnity, modalHelper, toolLogger);
 // Register Batch Execute Tool (high-priority for performance)
 registerBatchExecuteTool(server, mcpUnity, toolLogger);
 // Register all resources into the MCP server

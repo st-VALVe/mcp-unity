@@ -159,6 +159,25 @@ The following tools are available for manipulating and querying Unity scenes and
 - `batch_execute`: Executes multiple tool operations in a single batch request, reducing round-trips and enabling atomic operations with optional rollback on failure
   > **Example prompt:** "Create 10 empty GameObjects named Enemy_1 through Enemy_10 in a single batch operation"
 
+- `detect_unity_modal` *(Windows-only)*: Detects native Win32 modal dialogs blocking the Unity Editor main thread (read-only). Useful when the WebSocket is connected but Unity stops responding to tool calls.
+  > **Example prompt:** "Unity stopped responding — check if a native modal dialog is blocking it"
+
+- `dismiss_unity_modal` *(Windows-only)*: Dismisses a native Win32 modal by exact button name (case-sensitive). Idempotent — returns `dialog_already_dismissed` if the dialog is gone.
+  > **Example prompt:** "Click 'Don't Save' on the Unity scene-modified dialog"
+
+### Modal dialog tools (Windows-only)
+
+When Unity's main thread is blocked by a native modal (e.g. *Scene(s) Have Been Modified*), MCP requests time out because the WebSocket bridge cannot execute Unity-side code. The `detect_unity_modal` and `dismiss_unity_modal` tools run **out-of-process** via PowerShell + UIAutomation against the OS, not against Unity.
+
+Resolution priority for the target Unity process: explicit `targetPid` → explicit `projectPath` → cwd-fallback (when `cwd/ProjectSettings` exists) → `UNITY_PID` env hint → single-Unity heuristic. Ambiguity returns `multiple_unity_processes_require_explicit_target` with the candidate list.
+
+Only Win32 dialogs (window class `#32770`) are supported in MVP — IMGUI / `EditorUtility.DisplayDialog` modals return `unsupported_dialog_kind`. UAC mismatch (Unity elevated, Node not) returns `permission_denied_uac_mismatch`.
+
+**Optional opt-in env var** for read-only timeout-path diagnostics:
+- `MCP_UNITY_DETECT_MODALS_ON_TIMEOUT=true` — when a Unity request times out, the bridge spawns the modal helper for ≤500ms and attaches `details.modalDiagnostics` to the rejected error. Failure-tolerant: detection failure never masks the original timeout. Default off.
+
+Live UIAutomation interaction with native dialogs cannot run in standard headless CI (Windows session 0 isolation). Unit tests mock the spawn boundary; an interactive Windows runner is required for end-to-end verification.
+
 ### MCP Server Resources
 
 - `unity://menu-items`: Retrieves a list of all available menu items in the Unity Editor to facilitate `execute_menu_item` tool

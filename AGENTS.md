@@ -148,6 +148,16 @@ Node reads config from `../ProjectSettings/McpUnitySettings.json` relative to **
 - `assign_material` — Assign materials to Renderer components
 - `modify_material` — Modify material properties (colors, floats, textures)
 - `get_material_info` — Get material details including all properties
+- `detect_unity_modal` — Detect a native Win32 modal dialog blocking Unity main thread (Windows-only, out-of-process via PowerShell). Read-only.
+- `dismiss_unity_modal` — Dismiss a native Win32 modal dialog by exact button name (Windows-only, idempotent, returns `dialog_already_dismissed` when already gone).
+
+#### Modal dialog tools (Windows-only)
+The `detect_unity_modal` / `dismiss_unity_modal` tools live entirely on the Node side because a blocked Unity main thread cannot answer WebSocket calls. They spawn `powershell.exe` to enumerate Unity processes via WMI and inspect/click `#32770` native dialogs via UIAutomation. Resolution priority for the target Unity process: explicit `targetPid` → explicit `projectPath` → cwd-fallback (when `cwd/ProjectSettings` exists) → `UNITY_PID` env hint → single-Unity heuristic. Ambiguity returns `multiple_unity_processes_require_explicit_target`. IMGUI / non-#32770 modals return `unsupported_dialog_kind` (out of MVP scope).
+
+Real UIAutomation interaction with native dialogs cannot run in standard headless CI (session 0). Unit tests mock `child_process.spawn` via DI; the live PowerShell path requires a manual run on an interactive Windows runner.
+
+#### Optional env vars (Node side)
+- `MCP_UNITY_DETECT_MODALS_ON_TIMEOUT=true` — enables read-only modal diagnostics on Unity request timeouts. On timeout, the bridge spawns the modal helper for ≤500ms and attaches `details.modalDiagnostics` to the rejected error. Failure-tolerant: detection failure never masks the original timeout. Default off until measured. Settings-file flag is intentionally NOT exposed yet — Unity-side `JsonUtility` round-trips would drop unknown fields.
 
 ### Available resources (current)
 - `unity://menu-items` — List of available menu items
