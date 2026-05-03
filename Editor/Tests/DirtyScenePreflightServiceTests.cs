@@ -74,7 +74,8 @@ namespace McpUnity.Tests
         [Test]
         public void DirtyActiveScene_WithFailPolicy_RefusesWithDirtyScenesPayload()
         {
-            CreateDirtySavedScene("FailScene", NewSceneMode.Single);
+            Scene scene = CreateDirtySavedScene("FailScene", NewSceneMode.Single);
+            string expectedName = scene.name;
 
             DirtyScenePreflightOutcome outcome = _service.Apply(Parameters("fail"), out JObject errorResponse, out _);
 
@@ -82,7 +83,7 @@ namespace McpUnity.Tests
             Assert.AreEqual("dirty_scenes_blocked", errorResponse["error"]["errcode"]?.ToString());
             JArray dirtyScenes = (JArray)errorResponse["error"]["dirtyScenes"];
             Assert.AreEqual(1, dirtyScenes.Count);
-            Assert.AreEqual("FailScene", dirtyScenes[0]["name"]?.ToString());
+            Assert.AreEqual(expectedName, dirtyScenes[0]["name"]?.ToString());
             Assert.IsTrue(dirtyScenes[0]["isActive"]?.ToObject<bool>() ?? false);
         }
 
@@ -169,8 +170,10 @@ namespace McpUnity.Tests
         public void MultipleLoadedDirtyScenes_WithFailPolicy_ReturnsBothScenes()
         {
             Scene activeScene = CreateDirtySavedScene("ActiveDirtyScene", NewSceneMode.Single);
+            string activeName = activeScene.name;
             SceneManager.SetActiveScene(activeScene);
-            CreateDirtySavedScene("AdditiveDirtyScene", NewSceneMode.Additive);
+            Scene additiveScene = CreateDirtySavedScene("AdditiveDirtyScene", NewSceneMode.Additive);
+            string additiveName = additiveScene.name;
             SceneManager.SetActiveScene(activeScene);
 
             DirtyScenePreflightOutcome outcome = _service.Apply(Parameters("fail"), out JObject errorResponse, out _);
@@ -178,8 +181,8 @@ namespace McpUnity.Tests
             Assert.AreEqual(DirtyScenePreflightOutcome.Refused, outcome);
             JArray dirtyScenes = (JArray)errorResponse["error"]["dirtyScenes"];
             Assert.AreEqual(2, dirtyScenes.Count);
-            Assert.IsTrue(dirtyScenes.Any(scene => scene["name"]?.ToString() == "ActiveDirtyScene" && (scene["isActive"]?.ToObject<bool>() ?? false)));
-            Assert.IsTrue(dirtyScenes.Any(scene => scene["name"]?.ToString() == "AdditiveDirtyScene" && !(scene["isActive"]?.ToObject<bool>() ?? true)));
+            Assert.IsTrue(dirtyScenes.Any(scene => scene["name"]?.ToString() == activeName && (scene["isActive"]?.ToObject<bool>() ?? false)));
+            Assert.IsTrue(dirtyScenes.Any(scene => scene["name"]?.ToString() == additiveName && !(scene["isActive"]?.ToObject<bool>() ?? true)));
         }
 
         [Test]
