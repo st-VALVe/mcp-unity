@@ -5,6 +5,9 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { UnityConnection, ConnectionState, ConnectionStateChange, UnityConnectionConfig } from './unityConnection.js';
 import { CommandQueue, CommandQueueConfig, CommandQueueStats, QueuedCommand } from './commandQueue.js';
+import { UnityModalHelper, attachModalDiagnosticsOnTimeout } from '../utils/unityModalHelper.js';
+
+const MODAL_DIAGNOSTICS_BUDGET_MS = 500;
 
 // Top-level constant for the Unity settings JSON path
 const MCP_UNITY_SETTINGS_PATH = path.resolve(process.cwd(), './ProjectSettings/McpUnitySettings.json');
@@ -49,6 +52,8 @@ export interface SendRequestOptions {
   queueIfDisconnected?: boolean;
   /** Custom timeout for this request in milliseconds */
   timeout?: number;
+  /** If true, do not run opt-in modal diagnostics when this request times out */
+  skipModalDiagnosticsOnTimeout?: boolean;
 }
 
 /**
@@ -59,6 +64,12 @@ export interface McpUnityConfig {
   queue?: CommandQueueConfig;
   /** Whether command queuing is enabled by default (default: true) */
   queueingEnabled?: boolean;
+  /**
+   * Optional out-of-process modal helper. When provided AND timeout-path detection is enabled
+   * (env MCP_UNITY_DETECT_MODALS_ON_TIMEOUT=true), request timeouts will attach
+   * `details.modalDiagnostics` to the error in a fast, failure-tolerant way.
+   */
+  modalHelper?: UnityModalHelper;
 }
 
 export class McpUnity {
@@ -81,10 +92,15 @@ export class McpUnity {
   // Flag to track if we're currently replaying queued commands
   private isReplayingQueue: boolean = false;
 
+  // Modal-helper integration for opt-in timeout-path read-only diagnostics
+  private modalHelper: UnityModalHelper | undefined;
+  private detectModalsOnTimeout: boolean = false;
+
   constructor(logger: Logger, config?: McpUnityConfig) {
     this.logger = logger;
     this.commandQueue = new CommandQueue(logger, config?.queue);
     this.queueingEnabled = config?.queueingEnabled ?? true;
+    this.modalHelper = config?.modalHelper;
   }
 
   /**
@@ -188,6 +204,21 @@ export class McpUnity {
     const configTimeout = config.RequestTimeoutSeconds;
     this.requestTimeout = configTimeout ? parseInt(configTimeout, 10) * 1000 : 30000;
     this.logger.info(`Using request timeout: ${this.requestTimeout / 1000} seconds`);
+
+    // Opt-in timeout-path read-only modal diagnostics. Env-only for MVP — Unity-side
+    // McpUnitySettings JsonUtility round-trips would drop unknown JSON fields, so we
+    // intentionally do not surface this via McpUnitySettings.json yet.
+    const detectModalsEnv = process.env.MCP_UNITY_DETECT_MODALS_ON_TIMEOUT;
+    this.detectModalsOnTimeout = detectModalsEnv === 'true' || detectModalsEnv === '1';
+    if (this.detectModalsOnTimeout && !this.modalHelper) {
+      this.logger.warn(
+        'MCP_UNITY_DETECT_MODALS_ON_TIMEOUT is set but no modalHelper was injected — diagnostics disabled'
+      );
+      this.detectModalsOnTimeout = false;
+    }
+    if (this.detectModalsOnTimeout) {
+      this.logger.info('Timeout-path modal diagnostics enabled (read-only, 500ms budget)');
+    }
   }
 
   /**
@@ -245,7 +276,11 @@ export class McpUnity {
     for (const command of commands) {
       try {
         // Send the command directly using internal method
-        const result = await this.sendRequestInternal(command.request, command.timeout);
+        const result = await this.sendRequestInternal(
+          command.request,
+          command.timeout,
+          command.skipModalDiagnosticsOnTimeout
+        );
         command.resolve(result);
         this.commandQueue.recordReplaySuccess();
       } catch (error) {
@@ -318,7 +353,11 @@ export class McpUnity {
    * @param options Optional settings for the request
    */
   public async sendRequest(request: UnityRequest, options: SendRequestOptions = {}): Promise<any> {
-    const { queueIfDisconnected = this.queueingEnabled, timeout } = options;
+    const {
+      queueIfDisconnected = this.queueingEnabled,
+      timeout,
+      skipModalDiagnosticsOnTimeout = false
+    } = options;
     const requestId = request.id as string || uuidv4();
     const message: UnityRequest = {
       ...request,
@@ -327,7 +366,7 @@ export class McpUnity {
 
     // If connected, send directly
     if (this.isConnected) {
-      return this.sendRequestInternal(message, timeout);
+      return this.sendRequestInternal(message, timeout, skipModalDiagnosticsOnTimeout);
     }
 
     // If not started, throw error
@@ -345,7 +384,8 @@ export class McpUnity {
           request: message,
           resolve,
           reject,
-          timeout
+          timeout,
+          skipModalDiagnosticsOnTimeout
         });
 
         if (result.success) {
@@ -365,7 +405,8 @@ export class McpUnity {
           request: message,
           resolve,
           reject,
-          timeout
+          timeout,
+          skipModalDiagnosticsOnTimeout
         });
 
         if (result.success) {
@@ -380,7 +421,7 @@ export class McpUnity {
     try {
       await this.connection.connect();
       // Connection successful, send the request
-      return this.sendRequestInternal(message, timeout);
+      return this.sendRequestInternal(message, timeout, skipModalDiagnosticsOnTimeout);
     } catch (error) {
       // Connection failed - if queuing is enabled, queue the command
       if (queueIfDisconnected) {
@@ -392,7 +433,8 @@ export class McpUnity {
             request: message,
             resolve,
             reject,
-            timeout
+            timeout,
+            skipModalDiagnosticsOnTimeout
           });
 
           if (result.success) {
@@ -412,7 +454,11 @@ export class McpUnity {
    * Internal method to send a request directly to Unity
    * Bypasses queuing logic - assumes connection is already established
    */
-  private sendRequestInternal(request: UnityRequest, customTimeout?: number): Promise<any> {
+  private sendRequestInternal(
+    request: UnityRequest,
+    customTimeout?: number,
+    skipModalDiagnosticsOnTimeout: boolean = false
+  ): Promise<any> {
     const requestId = request.id as string;
     const timeoutMs = customTimeout ?? this.requestTimeout;
 
@@ -422,13 +468,23 @@ export class McpUnity {
         return;
       }
 
-      // Create timeout for the request
-      const timeout = setTimeout(() => {
-        if (this.pendingRequests.has(requestId)) {
-          this.logger.error(`Request ${requestId} timed out after ${timeoutMs}ms`);
-          this.pendingRequests.delete(requestId);
-          reject(new McpUnityError(ErrorType.TIMEOUT, 'Request timed out'));
-        }
+      // Create timeout for the request.
+      // Ordering matters: claim ownership (delete from pendingRequests) BEFORE running
+      // any async modal-diagnostics work, so a late Unity response cannot race past us
+      // and double-resolve via handleMessage.
+      const timeout = setTimeout(async () => {
+        if (!this.pendingRequests.has(requestId)) return;
+        this.logger.error(`Request ${requestId} timed out after ${timeoutMs}ms`);
+        this.pendingRequests.delete(requestId);
+
+        const originalError = new McpUnityError(ErrorType.TIMEOUT, 'Request timed out');
+        await attachModalDiagnosticsOnTimeout(
+          this.modalHelper,
+          this.detectModalsOnTimeout && !skipModalDiagnosticsOnTimeout,
+          MODAL_DIAGNOSTICS_BUDGET_MS,
+          originalError
+        );
+        reject(originalError);
       }, timeoutMs);
 
       // Store pending request

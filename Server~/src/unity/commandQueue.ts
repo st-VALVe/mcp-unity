@@ -21,6 +21,8 @@ export interface QueuedCommand {
   queuedAt: number;
   /** Optional custom timeout for this specific command (in ms) */
   timeout?: number;
+  /** If true, skip opt-in modal diagnostics when this command times out */
+  skipModalDiagnosticsOnTimeout?: boolean;
 }
 
 /**
