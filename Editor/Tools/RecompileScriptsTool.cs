@@ -14,12 +14,12 @@ namespace McpUnity.Tools {
     /// </summary>
     public class RecompileScriptsTool : McpToolBase
     {
-        private class CompilationRequest 
+        private class CompilationRequest
         {
             public readonly bool ReturnWithLogs;
             public readonly int LogsLimit;
             public readonly TaskCompletionSource<JObject> CompletionSource;
-            
+
             public CompilationRequest(bool returnWithLogs, int logsLimit, TaskCompletionSource<JObject> completionSource)
             {
                 ReturnWithLogs = returnWithLogs;
@@ -27,23 +27,23 @@ namespace McpUnity.Tools {
                 CompletionSource = completionSource;
             }
         }
-        
-        private class CompilationResult 
+
+        private class CompilationResult
         {
             public readonly List<CompilerMessage> SortedLogs;
             public readonly int WarningsCount;
             public readonly int ErrorsCount;
-            
+
             public bool HasErrors => ErrorsCount > 0;
-            
-            public CompilationResult(List<CompilerMessage> sortedLogs, int warningsCount, int errorsCount) 
+
+            public CompilationResult(List<CompilerMessage> sortedLogs, int warningsCount, int errorsCount)
             {
                 SortedLogs = sortedLogs;
                 WarningsCount = warningsCount;
                 ErrorsCount = errorsCount;
             }
         }
-        
+
         private readonly List<CompilationRequest> _pendingRequests = new List<CompilationRequest>();
         private readonly List<CompilerMessage> _compilationLogs = new List<CompilerMessage>();
         private int _processedAssemblies = 0;
@@ -66,7 +66,7 @@ namespace McpUnity.Tools {
             var returnWithLogs = GetBoolParameter(parameters, "returnWithLogs", true);
             var logsLimit = Mathf.Clamp(GetIntParameter(parameters, "logsLimit", 100), 0, 1000);
             var request = new CompilationRequest(returnWithLogs, logsLimit, tcs);
-            
+
             bool hasActiveRequest = false;
             lock (_pendingRequests)
             {
@@ -79,10 +79,10 @@ namespace McpUnity.Tools {
                 McpLogger.LogInfo("Recompilation already in progress. Waiting for completion...");
                 return;
             }
-            
+
             // On first request, initialize compilation listeners and start compilation
             StartCompilationTracking();
-                
+
             if (EditorApplication.isCompiling == false)
             {
                 McpLogger.LogInfo("Recompiling all scripts in the Unity project");
@@ -100,7 +100,7 @@ namespace McpUnity.Tools {
             CompilationPipeline.assemblyCompilationFinished += OnAssemblyCompilationFinished;
             CompilationPipeline.compilationFinished += OnCompilationFinished;
         }
-        
+
         /// <summary>
         /// Unsubscribe from compilation events
         /// </summary>
@@ -131,13 +131,13 @@ namespace McpUnity.Tools {
             int errorsCount = _compilationLogs.Count(l => l.type == CompilerMessageType.Error);
             int warningsCount = _compilationLogs.Count(l => l.type == CompilerMessageType.Warning);
             CompilationResult result = new CompilationResult(sortedLogs, warningsCount, errorsCount);
-            
+
             // Stop tracking before completing requests
             StopCompilationTracking();
-            
+
             // Complete all requests received before compilation end, the next received request will start a new compilation
             List<CompilationRequest> requestsToComplete = new List<CompilationRequest>();
-            
+
             lock (_pendingRequests)
             {
                 requestsToComplete.AddRange(_pendingRequests);
@@ -160,7 +160,7 @@ namespace McpUnity.Tools {
 
             foreach (var message in logsToReturn)
             {
-                var logObject = new JObject 
+                var logObject = new JObject
                 {
                     ["message"] = message.message,
                     ["type"] = message.type.ToString()
@@ -183,7 +183,7 @@ namespace McpUnity.Tools {
 
             summaryMessage += $" (returnWithLogs: {request.ReturnWithLogs}, logsLimit: {request.LogsLimit})";
 
-            var response = new JObject 
+            var response = new JObject
             {
                 ["success"] = true,
                 ["type"] = "text",
