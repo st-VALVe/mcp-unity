@@ -33,6 +33,14 @@ namespace McpUnity.Tools
         /// <param name="tcs">TaskCompletionSource to set the result or exception.</param>
         public override async void ExecuteAsync(JObject parameters, TaskCompletionSource<JObject> tcs)
         {
+            var preflightService = new DirtyScenePreflightService();
+            if (preflightService.Apply(parameters, out JObject errorResponse, out JObject preflightReport) ==
+                DirtyScenePreflightOutcome.Refused)
+            {
+                tcs.SetResult(errorResponse);
+                return;
+            }
+
             // Parse parameters
             string testModeStr = parameters?["testMode"]?.ToObject<string>() ?? "EditMode";
             string testFilter = parameters?["testFilter"]?.ToObject<string>(); // Optional
@@ -53,6 +61,7 @@ namespace McpUnity.Tools
 
             // Call the service to run tests
             JObject result = await _testRunnerService.ExecuteTestsAsync(testMode, returnOnlyFailures, returnWithLogs, testFilter);
+            result["preflight"] = preflightReport;
             if (captureOnFailure && HasFailures(result))
             {
                 result["diagnostics"] = await DiagnosticsCaptureUtility.CaptureAsync(new JObject

@@ -190,6 +190,55 @@ describe('Request timeout handling', () => {
 
     await unity.stop();
   });
+
+  it('preserves structured Unity error payload fields in McpUnityError.details', async () => {
+    const logger = new Logger('Test', LogLevel.ERROR);
+    const unity = new McpUnity(logger, { queueingEnabled: false });
+    const connection = {
+      isConnected: true,
+      isConnecting: false,
+      connectionState: ConnectionState.Connected,
+      send: jest.fn(),
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+      removeAllListeners: jest.fn(),
+      forceReconnect: jest.fn(),
+      getStats: jest.fn(() => ({
+        state: ConnectionState.Connected,
+        reconnectAttempt: 0,
+        timeSinceLastPong: 0
+      }))
+    };
+
+    (unity as any).connection = connection;
+
+    const promise = unity.sendRequest({
+      id: 'structured-error',
+      method: 'enter_play_mode',
+      params: { dirtyScenePolicy: 'fail' }
+    });
+
+    (unity as any).handleMessage(JSON.stringify({
+      id: 'structured-error',
+      error: {
+        type: 'dirty_scene_preflight_refused',
+        errcode: 'dirty_scenes_blocked',
+        message: 'Refused to proceed.',
+        dirtyScenes: [{ name: 'Main', path: 'Assets/Main.unity', isActive: true, hasPath: true }]
+      }
+    }));
+
+    await expect(promise).rejects.toMatchObject({
+      type: ErrorType.TOOL_EXECUTION,
+      message: 'Refused to proceed.',
+      details: {
+        errcode: 'dirty_scenes_blocked',
+        dirtyScenes: [{ name: 'Main', path: 'Assets/Main.unity', isActive: true, hasPath: true }]
+      }
+    });
+
+    await unity.stop();
+  });
 });
 
 describe('Transform schema compatibility', () => {

@@ -178,6 +178,20 @@ Only Win32 dialogs (window class `#32770`) are supported in MVP — IMGUI / `Edi
 
 Live UIAutomation interaction with native dialogs cannot run in standard headless CI (Windows session 0 isolation). Unit tests mock the spawn boundary; an interactive Windows runner is required for end-to-end verification.
 
+### Dirty scene preflight for Play Mode and tests
+
+`enter_play_mode` and `run_tests` accept `dirtyScenePolicy` to decide what to do when loaded scenes have unsaved changes before Unity would otherwise show a *Scene(s) Have Been Modified* prompt.
+
+Available policies:
+- `report` (default): proceed and include a warning in `preflight.warnings`; does not save or discard changes.
+- `fail`: refuse with `errcode="dirty_scenes_blocked"` and a `dirtyScenes` payload. This is recommended for CI/headless callers.
+- `save`: save each dirty loaded scene; refuses with `cannot_save_unsaved_scene` if any dirty scene has no asset path.
+- `discard`: reload scenes from disk and discard dirty state; requires `dirtyScenePolicyScope`.
+
+`dirtyScenePolicyScope` is required only for `discard` when dirty scenes are present:
+- `active`: reloads the active scene from disk; additive scenes are detached and reported in `preflight.warnings`.
+- `loaded`: reloads the active scene, then reopens loaded additive scenes by path; refuses with `cannot_discard_unsaved_scene` if any loaded scene has no asset path.
+
 ### MCP Server Resources
 
 - `unity://menu-items`: Retrieves a list of all available menu items in the Unity Editor to facilitate `execute_menu_item` tool

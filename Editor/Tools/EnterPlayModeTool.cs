@@ -1,4 +1,5 @@
 using McpUnity.Unity;
+using McpUnity.Services;
 using McpUnity.Utils;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -23,27 +24,34 @@ namespace McpUnity.Tools
 
         public override JObject Execute(JObject parameters)
         {
+            var preflightService = new DirtyScenePreflightService();
+            if (preflightService.Apply(parameters, out JObject errorResponse, out JObject preflightReport) ==
+                DirtyScenePreflightOutcome.Refused)
+            {
+                return errorResponse;
+            }
+
             if (EditorApplication.isPlaying)
             {
-                return new JObject
+                return AddPreflight(new JObject
                 {
                     ["success"] = true,
                     ["type"] = "text",
                     ["message"] = "Already in Play Mode. No action taken.",
                     ["wasAlreadyPlaying"] = true
-                };
+                }, preflightReport);
             }
 
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                return new JObject
+                return AddPreflight(new JObject
                 {
                     ["success"] = true,
                     ["type"] = "text",
                     ["message"] = "Play Mode transition already in progress.",
                     ["wasAlreadyPlaying"] = false,
                     ["transitionInProgress"] = true
-                };
+                }, preflightReport);
             }
 
             McpLogger.LogInfo("[MCP Unity] Scheduling Play Mode entry on next editor update.");
@@ -67,14 +75,20 @@ namespace McpUnity.Tools
             };
             EditorApplication.update += handler;
 
-            return new JObject
+            return AddPreflight(new JObject
             {
                 ["success"] = true,
                 ["type"] = "text",
                 ["message"] = "Requested Play Mode entry. The editor will transition on the next update; expect a brief MCP disconnect.",
                 ["wasAlreadyPlaying"] = false,
                 ["transitionInProgress"] = true
-            };
+            }, preflightReport);
+        }
+
+        private static JObject AddPreflight(JObject result, JObject preflightReport)
+        {
+            result["preflight"] = preflightReport;
+            return result;
         }
     }
 }

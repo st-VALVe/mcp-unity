@@ -305,10 +305,16 @@ export class McpUnity {
         this.pendingRequests.delete(response.id);
 
         if (response.error) {
+          const { message, type, details, ...extraDetails } = response.error;
+          const mergedDetails = {
+            ...(details && typeof details === 'object' ? details : details !== undefined ? { details } : {}),
+            ...extraDetails,
+          };
+
           request.reject(new McpUnityError(
             ErrorType.TOOL_EXECUTION,
-            response.error.message || 'Unknown error',
-            response.error.details
+            message || 'Unknown error',
+            Object.keys(mergedDetails).length > 0 ? mergedDetails : undefined
           ));
         } else {
           request.resolve(response.result);
