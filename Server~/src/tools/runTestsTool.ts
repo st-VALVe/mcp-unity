@@ -8,6 +8,8 @@ import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 // Constants for the tool
 const toolName = 'run_tests';
 const toolDescription = 'Runs Unity\'s Test Runner tests';
+const DirtyScenePolicy = z.enum(['fail', 'report', 'save', 'discard']);
+const DirtyScenePolicyScope = z.enum(['active', 'loaded']);
 const paramsSchema = z.object({
   testMode: z.string().optional().default('EditMode').describe('The test mode to run (EditMode or PlayMode) - defaults to EditMode (optional)'),
   testFilter: z.string().optional().default('').describe('The specific test filter to run (e.g. specific test name or class name, must include namespace) (optional)'),
@@ -23,7 +25,11 @@ const paramsSchema = z.object({
   logLimit: z.number().int().min(1).max(1000).optional().default(50).describe('Maximum console logs to capture on failure.'),
   includeStackTrace: z.boolean().optional().default(false).describe('Include stack traces in failure diagnostics console logs.'),
   superSize: z.number().int().min(1).max(8).optional().default(1).describe('Screenshot resolution multiplier for failure diagnostics.'),
-  waitSeconds: z.number().min(0.1).max(30).optional().default(2).describe('Screenshot file write timeout for failure diagnostics.')
+  waitSeconds: z.number().min(0.1).max(30).optional().default(2).describe('Screenshot file write timeout for failure diagnostics.'),
+  dirtyScenePolicy: DirtyScenePolicy.optional().default('report')
+    .describe("Policy for dirty scenes before action: 'fail' (refuse), 'report' (warn+proceed, default), 'save' (persist), 'discard' (reload from disk; requires dirtyScenePolicyScope)."),
+  dirtyScenePolicyScope: DirtyScenePolicyScope.optional()
+    .describe("Required when dirtyScenePolicy='discard'. 'active' reloads only the active scene (additive scenes detached). 'loaded' reloads all loaded scenes by path.")
 });
 
 /**
@@ -80,7 +86,9 @@ async function toolHandler(mcpUnity: McpUnity, params: any = {}): Promise<CallTo
     logLimit = 50,
     includeStackTrace = false,
     superSize = 1,
-    waitSeconds = 2
+    waitSeconds = 2,
+    dirtyScenePolicy = 'report',
+    dirtyScenePolicyScope
   } = params;
 
   // Create and wait for the test run
@@ -101,7 +109,9 @@ async function toolHandler(mcpUnity: McpUnity, params: any = {}): Promise<CallTo
       logLimit,
       includeStackTrace,
       superSize,
-      waitSeconds
+      waitSeconds,
+      dirtyScenePolicy,
+      dirtyScenePolicyScope
     }
   });
   
@@ -109,7 +119,8 @@ async function toolHandler(mcpUnity: McpUnity, params: any = {}): Promise<CallTo
   if (!response.success) {
     throw new McpUnityError(
       ErrorType.TOOL_EXECUTION,
-      response.message || `Failed to run tests: Mode=${testMode}, Filter=${testFilter || 'none'}`
+      response.error?.message || response.message || `Failed to run tests: Mode=${testMode}, Filter=${testFilter || 'none'}`,
+      response.error || response
     );
   }
   
@@ -120,6 +131,7 @@ async function toolHandler(mcpUnity: McpUnity, params: any = {}): Promise<CallTo
   const failCount = response.failCount || 0;
   const skipCount = response.skipCount || 0;
   const diagnostics = response.diagnostics;
+  const preflight = response.preflight;
   
   return {
     content: [
@@ -134,6 +146,7 @@ async function toolHandler(mcpUnity: McpUnity, params: any = {}): Promise<CallTo
           passCount,
           failCount,
           skipCount,
+          preflight,
           diagnostics,
           results: testResults
         }, null, 2)

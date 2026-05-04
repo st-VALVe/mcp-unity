@@ -1,4 +1,5 @@
 using McpUnity.Unity;
+using McpUnity.Services;
 using McpUnity.Utils;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -23,6 +24,11 @@ namespace McpUnity.Tools
 
         public override JObject Execute(JObject parameters)
         {
+            // No-op guards must run BEFORE preflight so that destructive policies
+            // (`save` / `discard`) do not mutate scene state when the tool is about
+            // to answer "Already in Play Mode" / "transition in progress" and would
+            // not actually trigger a Play Mode entry. Preflight only has a purpose
+            // when an upcoming destructive transition could raise the modal.
             if (EditorApplication.isPlaying)
             {
                 return new JObject
@@ -46,6 +52,13 @@ namespace McpUnity.Tools
                 };
             }
 
+            var preflightService = new DirtyScenePreflightService();
+            if (preflightService.Apply(parameters, out JObject errorResponse, out JObject preflightReport) ==
+                DirtyScenePreflightOutcome.Refused)
+            {
+                return errorResponse;
+            }
+
             McpLogger.LogInfo("[MCP Unity] Scheduling Play Mode entry on next editor update.");
 
             // Defer EnterPlaymode to the next editor update so this response flushes through the
@@ -67,14 +80,20 @@ namespace McpUnity.Tools
             };
             EditorApplication.update += handler;
 
-            return new JObject
+            return AddPreflight(new JObject
             {
                 ["success"] = true,
                 ["type"] = "text",
                 ["message"] = "Requested Play Mode entry. The editor will transition on the next update; expect a brief MCP disconnect.",
                 ["wasAlreadyPlaying"] = false,
                 ["transitionInProgress"] = true
-            };
+            }, preflightReport);
+        }
+
+        private static JObject AddPreflight(JObject result, JObject preflightReport)
+        {
+            result["preflight"] = preflightReport;
+            return result;
         }
     }
 }

@@ -126,7 +126,7 @@ Node reads config from `../ProjectSettings/McpUnitySettings.json` relative to **
 - `update_gameobject` — Update or create GameObject properties
 - `update_component` — Update or add components on GameObjects
 - `add_package` — Install packages via Package Manager
-- `run_tests` — Run Unity Test Runner tests
+- `run_tests` — Run Unity Test Runner tests (supports dirty scene preflight)
 - `capture_game_view` — Capture a PNG screenshot of the Unity Game view
 - `capture_diagnostics` — Save screenshot, console log, scene hierarchy, and metadata artifacts
 - `send_console_log` — Send logs to Unity console
@@ -148,8 +148,12 @@ Node reads config from `../ProjectSettings/McpUnitySettings.json` relative to **
 - `assign_material` — Assign materials to Renderer components
 - `modify_material` — Modify material properties (colors, floats, textures)
 - `get_material_info` — Get material details including all properties
+- `enter_play_mode` — Enter Unity Play Mode (supports dirty scene preflight)
 - `detect_unity_modal` — Detect a native Win32 modal dialog blocking Unity main thread (Windows-only, out-of-process via PowerShell). Read-only.
 - `dismiss_unity_modal` — Dismiss a native Win32 modal dialog by exact button name (Windows-only, idempotent, returns `dialog_already_dismissed` when already gone).
+
+#### Dirty scene preflight (enter_play_mode / run_tests only)
+`enter_play_mode` and `run_tests` accept `dirtyScenePolicy` with values `fail`, `report`, `save`, or `discard`. Default is `report`: proceed and return warnings in `preflight.warnings` without saving or discarding user work. CI/headless callers should pass `dirtyScenePolicy="fail"` explicitly. `discard` requires `dirtyScenePolicyScope` (`active` or `loaded`) when dirty scenes are present; unsaved scenes without an asset path refuse with `cannot_discard_unsaved_scene`.
 
 #### Modal dialog tools (Windows-only)
 The `detect_unity_modal` / `dismiss_unity_modal` tools live entirely on the Node side because a blocked Unity main thread cannot answer WebSocket calls. They spawn `powershell.exe` to enumerate Unity processes via WMI and inspect/click `#32770` native dialogs via UIAutomation. Resolution priority for the target Unity process: explicit `targetPid` → explicit `projectPath` → cwd-fallback (when `cwd/ProjectSettings` exists) → `UNITY_PID` env hint → single-Unity heuristic. Ambiguity returns `multiple_unity_processes_require_explicit_target`. IMGUI / non-#32770 modals return `unsupported_dialog_kind` (out of MVP scope).
