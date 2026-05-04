@@ -40,6 +40,34 @@ namespace McpUnity.Services
                 return DirtyScenePreflightOutcome.Refused;
             }
 
+            // Validate policy-specific parameters BEFORE inspecting scenes, so caller
+            // misconfiguration (e.g. `discard` without `dirtyScenePolicyScope`) fails
+            // loudly even when scenes happen to be clean. Otherwise the misconfig is
+            // silently accepted on a clean state and only surfaces later when dirtiness
+            // appears, masking the original mistake.
+            if (policy == "discard")
+            {
+                if (string.IsNullOrEmpty(scope))
+                {
+                    errorResponse = CreateRefusal(
+                        "dirty_scene_preflight_refused",
+                        "discard_requires_scope",
+                        "dirtyScenePolicy='discard' requires dirtyScenePolicyScope='active' or 'loaded' (no default; explicit choice required to avoid data loss).",
+                        new JProperty("discardScopes", new JArray(DiscardScopes)));
+                    return DirtyScenePreflightOutcome.Refused;
+                }
+
+                if (!DiscardScopes.Contains(scope))
+                {
+                    errorResponse = CreateRefusal(
+                        "validation_error",
+                        "unknown_dirty_scene_policy_scope",
+                        $"Unknown dirtyScenePolicyScope '{scope}'. Expected 'active' or 'loaded'.",
+                        new JProperty("discardScopes", new JArray(DiscardScopes)));
+                    return DirtyScenePreflightOutcome.Refused;
+                }
+            }
+
             var loadedScenes = GetLoadedScenes();
             var dirtyScenes = loadedScenes.Where(scene => scene.IsDirty).ToList();
 
@@ -116,27 +144,9 @@ namespace McpUnity.Services
             JObject preflightReport,
             out JObject errorResponse)
         {
+            // Scope (null/unknown) was already validated by Apply before scene inspection,
+            // so we can assume scope is a known value at this point.
             errorResponse = null;
-
-            if (string.IsNullOrEmpty(scope))
-            {
-                errorResponse = CreateRefusal(
-                    "dirty_scene_preflight_refused",
-                    "discard_requires_scope",
-                    "dirtyScenePolicy='discard' requires dirtyScenePolicyScope='active' or 'loaded' (no default; explicit choice required to avoid data loss).",
-                    new JProperty("discardScopes", new JArray(DiscardScopes)));
-                return DirtyScenePreflightOutcome.Refused;
-            }
-
-            if (!DiscardScopes.Contains(scope))
-            {
-                errorResponse = CreateRefusal(
-                    "validation_error",
-                    "unknown_dirty_scene_policy_scope",
-                    $"Unknown dirtyScenePolicyScope '{scope}'. Expected 'active' or 'loaded'.",
-                    new JProperty("discardScopes", new JArray(DiscardScopes)));
-                return DirtyScenePreflightOutcome.Refused;
-            }
 
             SceneSnapshot activeScene = loadedScenes.FirstOrDefault(scene => scene.IsActive);
             if (activeScene == null)

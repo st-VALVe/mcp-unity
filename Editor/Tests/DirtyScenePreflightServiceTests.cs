@@ -140,6 +140,32 @@ namespace McpUnity.Tests
         }
 
         [Test]
+        public void CleanActiveScene_WithDiscardPolicyWithoutScope_StillRefuses()
+        {
+            // Regression: scope validation must happen BEFORE the dirty-scene check.
+            // Otherwise caller misconfiguration (`discard` without `scope`) is silently
+            // accepted on a clean state and only surfaces later when dirtiness appears,
+            // masking the original mistake.
+            CreateCleanSavedScene("CleanDiscardNoScopeScene", NewSceneMode.Single);
+
+            DirtyScenePreflightOutcome outcome = _service.Apply(Parameters("discard"), out JObject errorResponse, out _);
+
+            Assert.AreEqual(DirtyScenePreflightOutcome.Refused, outcome);
+            Assert.AreEqual("discard_requires_scope", errorResponse["error"]["errcode"]?.ToString());
+        }
+
+        [Test]
+        public void CleanActiveScene_WithDiscardPolicyAndUnknownScope_StillRefuses()
+        {
+            CreateCleanSavedScene("CleanDiscardUnknownScopeScene", NewSceneMode.Single);
+
+            DirtyScenePreflightOutcome outcome = _service.Apply(Parameters("discard", "everything"), out JObject errorResponse, out _);
+
+            Assert.AreEqual(DirtyScenePreflightOutcome.Refused, outcome);
+            Assert.AreEqual("unknown_dirty_scene_policy_scope", errorResponse["error"]["errcode"]?.ToString());
+        }
+
+        [Test]
         public void DirtyActiveScene_WithDiscardActiveScope_ReloadsScene()
         {
             Scene scene = CreateDirtySavedScene("DiscardActiveScene", NewSceneMode.Single);

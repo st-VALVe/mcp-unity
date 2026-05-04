@@ -24,34 +24,39 @@ namespace McpUnity.Tools
 
         public override JObject Execute(JObject parameters)
         {
-            var preflightService = new DirtyScenePreflightService();
-            if (preflightService.Apply(parameters, out JObject errorResponse, out JObject preflightReport) ==
-                DirtyScenePreflightOutcome.Refused)
-            {
-                return errorResponse;
-            }
-
+            // No-op guards must run BEFORE preflight so that destructive policies
+            // (`save` / `discard`) do not mutate scene state when the tool is about
+            // to answer "Already in Play Mode" / "transition in progress" and would
+            // not actually trigger a Play Mode entry. Preflight only has a purpose
+            // when an upcoming destructive transition could raise the modal.
             if (EditorApplication.isPlaying)
             {
-                return AddPreflight(new JObject
+                return new JObject
                 {
                     ["success"] = true,
                     ["type"] = "text",
                     ["message"] = "Already in Play Mode. No action taken.",
                     ["wasAlreadyPlaying"] = true
-                }, preflightReport);
+                };
             }
 
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
-                return AddPreflight(new JObject
+                return new JObject
                 {
                     ["success"] = true,
                     ["type"] = "text",
                     ["message"] = "Play Mode transition already in progress.",
                     ["wasAlreadyPlaying"] = false,
                     ["transitionInProgress"] = true
-                }, preflightReport);
+                };
+            }
+
+            var preflightService = new DirtyScenePreflightService();
+            if (preflightService.Apply(parameters, out JObject errorResponse, out JObject preflightReport) ==
+                DirtyScenePreflightOutcome.Refused)
+            {
+                return errorResponse;
             }
 
             McpLogger.LogInfo("[MCP Unity] Scheduling Play Mode entry on next editor update.");
